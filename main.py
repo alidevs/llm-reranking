@@ -1,28 +1,33 @@
 import logging
+import os
 import sys
 
-import nest_asyncio
-from llama_index.core import QueryBundle, Settings, SimpleDirectoryReader, StorageContext, VectorStoreIndex
+from dotenv import load_dotenv
+from llama_index.core import (
+    QueryBundle,
+    Settings,
+    SimpleDirectoryReader,
+    StorageContext,
+    VectorStoreIndex,
+)
 from llama_index.core.indices.vector_store import VectorIndexRetriever
-from llama_index.core.postprocessor import LLMRerank, SentenceTransformerRerank
+from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.schema import NodeWithScore
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
-from llama_index.vector_stores.qdrant import QdrantVectorStore
-from llama_index.vector_stores.qdrant.base import qdrant_client
-
-nest_asyncio.apply()
+from llama_index.vector_stores.milvus import MilvusVectorStore
 
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+load_dotenv()
 
 
 def setup_settings(model_name: str, embedding_model: str) -> None:
     Settings.embed_model = OllamaEmbedding(model_name=embedding_model)
-    Settings.llm = Ollama(model=model_name, request_timeout=360.0)
+    Settings.llm = Ollama(model=model_name, request_timeout=360.0, temperature=0.9)
     Settings.chunk_size = 512
 
 
@@ -33,9 +38,15 @@ def print_retrieved_nodes(retrieved_nodes: list[NodeWithScore]) -> None:
     print("=" * len(header))
 
 
-def initialize_vector_store() -> QdrantVectorStore:
-    client = qdrant_client.QdrantClient(location=":memory:")
-    return QdrantVectorStore(client=client, collection_name="llama3-paul-graham-collection")
+def initialize_vector_store():
+    connection_info = {
+        "uri": os.getenv("VECTOR_STORAGE_URI"),
+        "token": os.getenv("VECTOR_STORAGE_TOKEN"),
+        "user": os.getenv("VECTOR_STORAGE_USER"),
+        "password": os.getenv("VECTOR_STORAGE_PASSWORD"),
+    }
+
+    return MilvusVectorStore(dim=768, overwrite=True, **connection_info)
 
 
 def main() -> None:
@@ -45,11 +56,14 @@ def main() -> None:
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
     index = VectorStoreIndex.from_documents(documents, storage_context=storage_context)
 
-    reranker = SentenceTransformerRerank(model="cross-encoder/ms-marco-MiniLM-L-2-v2", top_n=5)
+    reranker = SentenceTransformerRerank(
+        model="cross-encoder/ms-marco-MiniLM-L-2-v2", top_n=5
+    )
     retriever = VectorIndexRetriever(index=index, similarity_top_k=10)
 
     while True:
-        query = input("*** Ask me something: ")
+        query = input("*** Ask me anything: ")
+
         if query == "exit":
             break
 
@@ -57,7 +71,9 @@ def main() -> None:
         reranked_nodes = reranker.postprocess_nodes(retrieved_nodes, QueryBundle(query))
         print_retrieved_nodes(reranked_nodes)
 
-        query_engine = index.as_query_engine(streaming=True, node_postprocessors=[reranker])
+        query_engine = index.as_query_engine(
+            streaming=True, node_postprocessors=[reranker]
+        )
         streaming_response = query_engine.query(query)
         print("_" * 50)
         streaming_response.print_response_stream()

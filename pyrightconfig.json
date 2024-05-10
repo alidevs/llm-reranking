@@ -1,0 +1,17 @@
+{
+  "venvPath": ".direnv",
+  "executionEnvironments": [{ "root": "." }],
+  "typeCheckingMode": "strict",
+  "reportMissingTypeArgument": false,
+  "reportMissingTypeStubs": false,
+  "reportUnknownParameterType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownMemberType": false,
+  "reportUntypedBaseClass": false,
+  "reportImplicitStringConcatenation": "error",
+  "reportMissingSuperCall": "error",
+  "reportPropertyTypeMismatch": "error",
+  "reportUnnecessaryTypeIgnoreComment": "error",
+  "reportUnusedCallResult": false,
+}
